@@ -1,13 +1,36 @@
 #!/bin/bash
 
 # define the directory where the spigot plugins are located
-PLUGIN_DIR="/path/to/spigot/plugins"
+PLUGIN_DIR="./../plugins"
+
+# check if the plugin directory exists
+if [ ! -d "$PLUGIN_DIR" ]; then
+  echo "Error: Plugin directory $PLUGIN_DIR not found!"
+  exit 1
+fi
 
 # define the path to the config file
 CONFIG_FILE="./ignoredplugins.config"
 
-# create the update log file (if it doesn't exist)
-touch ./update.log
+# create or clear the update log file
+if [ -f ./update.log ]; then
+  > ./update.log
+  echo "Info: update.log already exists, clearing..."
+else
+  touch ./update.log
+  echo "Info: Creating update.log..."
+fi
+
+# define the urlencode function
+urlencode() {
+  local data
+  if [ "$#" -eq "1" ]; then
+    data=$(curl -s -o /dev/null -w %{url_effective} --get --data-urlencode "$1" "")
+    echo "${data##/?}"
+  else
+    echo "Usage: urlencode <string>"
+  fi
+}
 
 # check for updates for all plugins
 for plugin in "$PLUGIN_DIR"/*.jar; do
@@ -20,8 +43,8 @@ for plugin in "$PLUGIN_DIR"/*.jar; do
     continue
   fi
 
-  # get the latest version of the plugin
-  latest_version=$(curl -s "https://api.spiget.org/v2/resources/$plugin_name/versions/latest" | grep -o '"name":"[^"]*"' | sed 's/"name":"\(.*\)"/\1/')
+  # get the latest version of the plugin from Spigot
+  latest_version=$(curl -s "https://api.spigotmc.org/simple/repositories/spigot/content/$plugin_name/" | grep -o '<a href="[^"]*.jar">' | sed -E 's/^.*\/([^\/]+)\.jar">.*$/\1/')
 
   # check if the download was successful
   if [ -z "$latest_version" ]; then
@@ -36,7 +59,7 @@ for plugin in "$PLUGIN_DIR"/*.jar; do
   fi
 
   # download the latest version of the plugin
-  curl -s "https://api.spiget.org/v2/resources/$plugin_name/versions/latest/download" -o "$PLUGIN_DIR/$plugin_name.$latest_version.jar.new"
+  curl -s "https://cdn.spigotmc.org/repositories/spigot/content/$plugin_name/$plugin_name-$latest_version.jar" -o "$PLUGIN_DIR/$plugin_name.$latest_version.jar.new"
 
   # check if the download was successful
   if [ $? -ne 0 ]; then
@@ -46,10 +69,14 @@ for plugin in "$PLUGIN_DIR"/*.jar; do
 
   # backup the old plugin jar only if an update is found
   mv "$plugin" "$plugin.bak"
-  
-  # replace the old plugin jar with the new one
-  mv "$PLUGIN_DIR/$plugin_name.$latest_version.jar" "$plugin"
 
-  # log the update to the update log file
-  echo "Updated $plugin_name from $(basename "$plugin") to $(basename "$plugin.bak")" >> ./update.log
+  # replace the old plugin jar with the new one
+  mv "$plugin_name.$latest_version.jar.new" "$plugin"
+
+  # check if the update was successful
+  if [ $? -eq 0 ]; then
+    echo "Updated $plugin_name to $latest_version" >> ./update.log
+  else
+    echo "Error updating $plugin_name to $latest_version"
+  fi
 done
