@@ -4,7 +4,7 @@
 PLUGIN_DIR="/path/to/spigot/plugins"
 
 # define the path to the config file
-CONFIG_FILE="./plugin-update.config"
+CONFIG_FILE="./ignoredplugins.config"
 
 # create the update log file (if it doesn't exist)
 touch ./update.log
