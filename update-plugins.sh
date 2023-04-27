@@ -4,7 +4,7 @@
 PLUGIN_DIR="/path/to/spigot/plugins"
 
 # define the path to the config file
-CONFIG_FILE="./ignoredplugins.config"
+CONFIG_FILE="./plugin-update.config"
 
 # create the update log file (if it doesn't exist)
 touch ./update.log
@@ -20,8 +20,23 @@ for plugin in "$PLUGIN_DIR"/*.jar; do
     continue
   fi
 
+  # get the latest version of the plugin
+  latest_version=$(curl -s "https://api.spiget.org/v2/resources/$plugin_name/versions/latest" | grep -o '"name":"[^"]*"' | sed 's/"name":"\(.*\)"/\1/')
+
+  # check if the download was successful
+  if [ -z "$latest_version" ]; then
+    echo "Error getting version for $plugin_name"
+    continue
+  fi
+
+  # check if the plugin is up-to-date
+  if echo "$plugin" | grep -q "$latest_version"; then
+    echo "$plugin_name is up-to-date"
+    continue
+  fi
+
   # download the latest version of the plugin
-  curl -s "https://api.spiget.org/v2/resources/$plugin_name/versions/latest/download" -o "$PLUGIN_DIR/$plugin_name.jar.new"
+  curl -s "https://api.spiget.org/v2/resources/$plugin_name/versions/latest/download" -o "$PLUGIN_DIR/$plugin_name.$latest_version.jar.new"
 
   # check if the download was successful
   if [ $? -ne 0 ]; then
@@ -29,18 +44,11 @@ for plugin in "$PLUGIN_DIR"/*.jar; do
     continue
   fi
 
-  # compare the new and old plugin versions
-  if diff -q "$plugin" "$PLUGIN_DIR/$plugin_name.jar.new" >/dev/null; then
-    echo "$plugin_name is up-to-date"
-    rm "$PLUGIN_DIR/$plugin_name.jar.new"
-    continue
-  fi
-
-  # backup the old plugin jar
+  # backup the old plugin jar only if an update is found
   mv "$plugin" "$plugin.bak"
-
+  
   # replace the old plugin jar with the new one
-  mv "$PLUGIN_DIR/$plugin_name.jar.new" "$plugin"
+  mv "$PLUGIN_DIR/$plugin_name.$latest_version.jar" "$plugin"
 
   # log the update to the update log file
   echo "Updated $plugin_name from $(basename "$plugin") to $(basename "$plugin.bak")" >> ./update.log
